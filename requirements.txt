@@ -1,0 +1,5 @@
+streamlit==0.66.0
+gwpy
+matplotlib
+numpy
+corner
