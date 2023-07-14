@@ -1,203 +1,158 @@
-import streamlit as st
+import altair as alt
 import pandas as pd
-import matplotlib.pyplot as plt
+import streamlit as st
+from vega_datasets import data
 
-# # Load data into a DataFrame
-# df = pd.read_csv('your_data.csv')
-
-# # Perform any preprocessing steps (e.g., cleaning, transforming)
-
-# def create_bar_chart(data):
-#     # Generate bar chart using matplotlib or other libraries
-#     # ...
-#     return chart
-
-# # Set the title of the dashboard
-st.title('Interactive Dashboard')
-
-# # Add filters or input components
-# filter_value = st.slider('Select a filter', min_value=0, max_value=100)
-
-# # Apply filters to the data
-# filtered_data = df[df['column'] > filter_value]
-
-# # Generate and display the chart
-# chart = create_bar_chart(filtered_data)
-# st.pyplot(chart)
-
-# #to run the file 
-# #streamlit run your_file.py
-
-# import streamlit as st
-# import pandas as pd
-# import numpy as np
-# import matplotlib.pyplot as plt
-
-# import requests, os
-# from gwpy.timeseries import TimeSeries
-# from gwosc.locate import get_urls
-# from gwosc import datasets
-# from gwosc.api import fetch_event_json
-
-# from copy import deepcopy
-# import base64
-
-# # -- Default detector list
-# detectorlist = ['H1','L1', 'V1']
-
-# # Title the app
-# st.title('Gravitational Wave Quickview App')
-
-# st.markdown("""
-#  * Use the menu at left to select data and set plot parameters
-#  * Your plots will appear below
-# """)
-
-# @st.cache   #-- Magic command to cache data
-# def load_gw(t0, detector):
-#     strain = TimeSeries.fetch_open_data(detector, t0-14, t0+14, cache=False)
-#     return strain
-
-# st.sidebar.markdown("## Select Data Time and Detector")
-
-# # -- Get list of events
-# # find_datasets(catalog='GWTC-1-confident',type='events')
-# eventlist = datasets.find_datasets(type='events')
-# eventlist = [name.split('-')[0] for name in eventlist if name[0:2] == 'GW']
-# eventset = set([name for name in eventlist])
-# eventlist = list(eventset)
-# eventlist.sort()
-
-# #-- Set time by GPS or event
-# select_event = st.sidebar.selectbox('How do you want to find data?',
-#                                     ['By event name', 'By GPS'])
-
-# if select_event == 'By GPS':
-#     # -- Set a GPS time:        
-#     str_t0 = st.sidebar.text_input('GPS Time', '1126259462.4')    # -- GW150914
-#     t0 = float(str_t0)
-
-#     st.sidebar.markdown("""
-#     Example times in the H1 detector:
-#     * 1126259462.4    (GW150914) 
-#     * 1187008882.4    (GW170817) 
-#     * 933200215       (hardware injection)
-#     * 1132401286.33   (Koi Fish Glitch) 
-#     """)
-
-# else:
-#     chosen_event = st.sidebar.selectbox('Select Event', eventlist)
-#     t0 = datasets.event_gps(chosen_event)
-#     detectorlist = list(datasets.event_detectors(chosen_event))
-#     detectorlist.sort()
-#     st.subheader(chosen_event)
-    
-#     # -- Experiment to display masses
-#     try:
-#         jsoninfo = fetch_event_json(chosen_event)
-#         for name, nameinfo in jsoninfo['events'].items():        
-#             st.write('Mass 1:', nameinfo['mass_1_source'], 'M$_{\odot}$')
-#             st.write('Mass 2:', nameinfo['mass_2_source'], 'M$_{\odot}$')
-#             #st.write('Distance:', int(nameinfo['luminosity_distance']), 'Mpc')
-#             st.write('Network SNR:', int(nameinfo['network_matched_filter_snr']))
-#             eventurl = 'https://gw-osc.org/eventapi/html/event/{}'.format(chosen_event)
-#             st.markdown('Event page: {}'.format(eventurl))
-#             st.write('\n')
-#     except:
-#         pass
+st.set_page_config(
+    page_title="Time series annotations", page_icon="⬇", layout="centered"
+)
 
 
-    
-# #-- Choose detector as H1, L1, or V1
-# detector = st.sidebar.selectbox('Detector', detectorlist)
-
-# # -- Create sidebar for plot controls
-# st.sidebar.markdown('## Set Plot Parameters')
-# dtboth = st.sidebar.slider('Time Range (seconds)', 0.1, 8.0, 1.0)  # min, max, default
-# dt = dtboth / 2.0
-
-# st.sidebar.markdown('#### Whitened and band-passed data')
-# whiten = st.sidebar.checkbox('Whiten?', value=True)
-# freqrange = st.sidebar.slider('Band-pass frequency range (Hz)', min_value=10, max_value=2000, value=(30,400))
+@st.experimental_memo
+def get_data():
+    source = data.stocks()
+    source = source[source.date.gt("2004-01-01")]
+    return source
 
 
-# # -- Create sidebar for Q-transform controls
-# st.sidebar.markdown('#### Q-tranform plot')
-# vmax = st.sidebar.slider('Colorbar Max Energy', 10, 500, 25)  # min, max, default
-# qcenter = st.sidebar.slider('Q-value', 5, 120, 5)  # min, max, default
-# qrange = (int(qcenter*0.8), int(qcenter*1.2))
+@st.experimental_memo(ttl=60 * 60 * 24)
+def get_chart(data):
+    hover = alt.selection_single(
+        fields=["date"],
+        nearest=True,
+        on="mouseover",
+        empty="none",
+    )
+
+    lines = (
+        alt.Chart(data, height=500, title="Evolution of stock prices")
+        .mark_line()
+        .encode(
+            x=alt.X("date", title="Date"),
+            y=alt.Y("price", title="Price"),
+            color="symbol",
+        )
+    )
+
+    # Draw points on the line, and highlight based on selection
+    points = lines.transform_filter(hover).mark_circle(size=65)
+
+    # Draw a rule at the location of the selection
+    tooltips = (
+        alt.Chart(data)
+        .mark_rule()
+        .encode(
+            x="yearmonthdate(date)",
+            y="price",
+            opacity=alt.condition(hover, alt.value(0.3), alt.value(0)),
+            tooltip=[
+                alt.Tooltip("date", title="Date"),
+                alt.Tooltip("price", title="Price (USD)"),
+            ],
+        )
+        .add_selection(hover)
+    )
+
+    return (lines + points + tooltips).interactive()
 
 
-# #-- Create a text element and let the reader know the data is loading.
-# strain_load_state = st.text('Loading data...this may take a minute')
-# try:
-#     strain_data = load_gw(t0, detector)
-# except:
-#     st.text('Data load failed.  Try a different time and detector pair.')
-#     st.text('Problems can be reported to gwosc@igwn.org')
-#     raise st.ScriptRunner.StopException
-    
-# strain_load_state.text('Loading data...done!')
+st.title("⬇ Time series annotations")
 
-# #-- Make a time series plot
+st.write("Give more context to your time series using annotations!")
 
-# cropstart = t0-0.2
-# cropend   = t0+0.1
+col1, col2, col3 = st.columns(3)
+with col1:
+    ticker = st.text_input("Choose a ticker (⬇💬👇ℹ️ ...)", value="⬇")
+with col2:
+    ticker_dx = st.slider(
+        "Horizontal offset", min_value=-30, max_value=30, step=1, value=0
+    )
+with col3:
+    ticker_dy = st.slider(
+        "Vertical offset", min_value=-30, max_value=30, step=1, value=-10
+    )
 
-# cropstart = t0 - dt
-# cropend   = t0 + dt
+# Original time series chart. Omitted `get_chart` for clarity
+source = get_data()
+chart = get_chart(source)
 
-# st.subheader('Raw data')
-# center = int(t0)
-# strain = deepcopy(strain_data)
-# fig1 = strain.crop(cropstart, cropend).plot()
-# #fig1 = cropped.plot()
-# st.pyplot(fig1, clear_figure=True)
+# Input annotations
+ANNOTATIONS = [
+    ("Mar 01, 2008", "Pretty good day for GOOG"),
+    ("Dec 01, 2007", "Something's going wrong for GOOG & AAPL"),
+    ("Nov 01, 2008", "Market starts again thanks to..."),
+    ("Dec 01, 2009", "Small crash for GOOG after..."),
+]
 
+# Create a chart with annotations
+annotations_df = pd.DataFrame(ANNOTATIONS, columns=["date", "event"])
+annotations_df.date = pd.to_datetime(annotations_df.date)
+annotations_df["y"] = 0
+annotation_layer = (
+    alt.Chart(annotations_df)
+    .mark_text(size=15, text=ticker, dx=ticker_dx, dy=ticker_dy, align="center")
+    .encode(
+        x="date:T",
+        y=alt.Y("y:Q"),
+        tooltip=["event"],
+    )
+    .interactive()
+)
 
-# # -- Try whitened and band-passed plot
-# # -- Whiten and bandpass data
-# st.subheader('Whitened and Band-passed Data')
+# Display both charts together
+st.altair_chart((chart + annotation_layer).interactive(), use_container_width=True)
 
-# if whiten:
-#     white_data = strain.whiten()
-#     bp_data = white_data.bandpass(freqrange[0], freqrange[1])
-# else:
-#     bp_data = strain.bandpass(freqrange[0], freqrange[1])
+st.write("## Code")
 
-# bp_cropped = bp_data.crop(cropstart, cropend)
-# fig3 = bp_cropped.plot()
-# st.pyplot(fig3, clear_figure=True)
+st.write(
+    "See more in our public [GitHub"
+    " repository](https://github.com/streamlit/example-app-time-series-annotation)"
+)
 
-# # -- Allow data download
-# download = {'Time':bp_cropped.times, 'Strain':bp_cropped.value}
-# df = pd.DataFrame(download)
-# csv = df.to_csv(index=False)
-# b64 = base64.b64encode(csv.encode()).decode()  # some strings <-> bytes conversions necessary here
-# href = f'<a href="data:file/csv;base64,{b64}">Download Data as CSV File</a>'
-# st.markdown(href, unsafe_allow_html=True)
+st.code(
+    f"""
+import altair as alt
+import pandas as pd
+import streamlit as st
+from vega_datasets import data
 
+@st.experimental_memo
+def get_data():
+    source = data.stocks()
+    source = source[source.date.gt("2004-01-01")]
+    return source
 
-# st.subheader('Q-transform')
-# hq = strain.q_transform(outseg=(t0-dt, t0+dt), qrange=qrange)
-# fig4 = hq.plot()
-# ax = fig4.gca()
-# fig4.colorbar(label="Normalised energy", vmax=vmax, vmin=0)
-# ax.grid(False)
-# ax.set_yscale('log')
-# ax.set_ylim(bottom=15)
-# st.pyplot(fig4, clear_figure=True)
+source = get_data()
 
+# Original time series chart. Omitted `get_chart` for clarity
+chart = get_chart(source)
 
+# Input annotations
+ANNOTATIONS = [
+    ("Mar 01, 2008", "Pretty good day for GOOG"),
+    ("Dec 01, 2007", "Something's going wrong for GOOG & AAPL"),
+    ("Nov 01, 2008", "Market starts again thanks to..."),
+    ("Dec 01, 2009", "Small crash for GOOG after..."),
+]
 
-# st.subheader("About this app")
-# st.markdown("""
-# This app displays data from LIGO, Virgo, and GEO downloaded from
-# the Gravitational Wave Open Science Center at https://gw-openscience.org .
+# Create a chart with annotations
+annotations_df = pd.DataFrame(ANNOTATIONS, columns=["date", "event"])
+annotations_df.date = pd.to_datetime(annotations_df.date)
+annotations_df["y"] = 0
+annotation_layer = (
+    alt.Chart(annotations_df)
+    .mark_text(size=15, text="{ticker}", dx={ticker_dx}, dy={ticker_dy}, align="center")
+    .encode(
+        x="date:T",
+        y=alt.Y("y:Q"),
+        tooltip=["event"],
+    )
+    .interactive()
+)
 
+# Display both charts together
+st.altair_chart((chart + annotation_layer).interactive(), use_container_width=True)
 
-# You can see how this works in the [Quickview Jupyter Notebook](https://github.com/losc-tutorial/quickview)
-
-# """)
-
-print("hello")
+""",
+    "python",
+)
