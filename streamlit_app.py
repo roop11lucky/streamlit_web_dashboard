@@ -1,6 +1,6 @@
-# import streamlit as st
-# import pandas as pd
-# import matplotlib.pyplot as plt
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # # Load data into a DataFrame
 # df = pd.read_csv('your_data.csv')
@@ -13,7 +13,7 @@
 #     return chart
 
 # # Set the title of the dashboard
-# st.title('Interactive Dashboard')
+st.title('Interactive Dashboard')
 
 # # Add filters or input components
 # filter_value = st.slider('Select a filter', min_value=0, max_value=100)
