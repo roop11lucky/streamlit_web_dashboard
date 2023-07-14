@@ -23,14 +23,18 @@ st.title('Interactive Dashboard')
 
 # Create the pie chart
 pie_chart = create_pie_chart(data)
-pie_clicked = st.plotly_chart(pie_chart)
+
+# Display the pie chart and capture click events
+clicked = st.plotly_chart(pie_chart)
 
 # Handle click events on the pie chart
 selected_category = None
-if pie_clicked:
-    clicked_data = pie_clicked.expand_data()
-    if clicked_data and 'points' in clicked_data[0]:
-        selected_category = clicked_data[0]['points'][0]['label']
+if st.session_state.get('click_data') and st.session_state['click_data']['points']:
+    selected_category = st.session_state['click_data']['points'][0]['label']
+
+# Store click event data in session state
+if clicked:
+    st.session_state['click_data'] = clicked.event_data
 
 # Apply filters to the data based on the selected category
 if selected_category:
